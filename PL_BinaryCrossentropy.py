@@ -53,7 +53,16 @@ class LitAutoEncoder(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr = self.lr)
         return optimizer
-
+    
+    def test_step(self, batch, batch_idx):
+        inputs, labels = batch
+        outputs = self(inputs)
+        loss = self.criterion(outputs, labels.unsqueeze(1).float())
+        acc = self.accuracy(outputs, labels.unsqueeze(1).float())
+        self.log('test_loss', loss ,prog_bar = True);
+        self.log('test_acc', acc ,prog_bar = True);
+        
+        return loss
     
 def run(args):
     
@@ -73,16 +82,22 @@ def run(args):
         'val':transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize((0.49372694, 0.45860133, 0.41793576), (0.22488698, 0.22060247, 0.22134696))
-        ]),
+            transforms.Normalize((0.49372694, 0.45860133, 0.41793576), (0.22488698, 0.22060247, 0.22134696))]),
+        'test':transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize((0.48728254, 0.45438185, 0.41734886), (0.22419675, 0.22046398, 0.22168836))
+        ])
+        
     }
     image_datasets = {x: datasets.ImageFolder(os.path.join(args.root, x),
                                               transform[x])
-                      for x in ['train', 'val']}
+                      for x in ['train', 'val','test']}
 
     # Create data loaders
-    train_loader = DataLoader(image_datasets['train'], batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(image_datasets['val'], batch_size=args.batch_size)
+    train_loader = DataLoader(image_datasets['train'], batch_size=args.batch_size, num_workers=12 , shuffle=True)
+    val_loader = DataLoader(image_datasets['val'], batch_size=args.batch_size, num_workers=12)
+    test_loader = DataLoader(image_datasets['test'], batch_size=args.batch_size, num_workers=12)
     # Create the model
     model = LitAutoEncoder(args.model_name,args.Threshold)
     # Create a PyTorch Lightning trainer
@@ -91,6 +106,7 @@ def run(args):
 
     # Train the model
     trainer.fit(model, train_loader, val_loader)
+    trainer.test(dataloaders = test_loader)
     wandb.finish()
     
 if __name__ == "__main__":

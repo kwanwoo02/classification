@@ -50,6 +50,16 @@ class LitAutoEncoder(pl.LightningModule):
         self.log('val_acc', acc ,on_step = False, on_epoch = True, logger = True);
         
         return loss
+    
+    def test_step(self, batch, batch_idx):
+        inputs, labels = batch
+        outputs = self(inputs)
+        loss = self.criterion(outputs, labels)
+        acc = self.accuracy(outputs, labels)
+        self.log('test_loss', loss, on_step = False, on_epoch = True, logger = True, prog_bar = True)
+        self.log('test_acc', acc, on_step = False, on_epoch = True, logger = True, prog_bar = True)
+        
+        return loss
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr = self.lr)
@@ -74,16 +84,21 @@ def run(args):
         'val':transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize((0.49372694, 0.45860133, 0.41793576), (0.22488698, 0.22060247, 0.22134696))
-        ]),
+            transforms.Normalize((0.49372694, 0.45860133, 0.41793576), (0.22488698, 0.22060247, 0.22134696))]),
+        'test':transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize((0.48728254, 0.45438185, 0.41734886), (0.22419675, 0.22046398, 0.22168836))
+        ])
     }
     image_datasets = {x: datasets.ImageFolder(os.path.join(args.root, x),
                                               transform[x])
-                      for x in ['train', 'val']}
+                      for x in ['train', 'val','test']}
 
     # Create data loaders
-    train_loader = DataLoader(image_datasets['train'], batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(image_datasets['val'], batch_size=args.batch_size)
+    train_loader = DataLoader(image_datasets['train'], batch_size=args.batch_size, num_workers=12, shuffle=True)
+    val_loader = DataLoader(image_datasets['val'], batch_size=args.batch_size, num_workers=12)
+    test_loader = DataLoader(image_datasets['test'], batch_size=args.batch_size, num_workers=12)
     num_classes = len(image_datasets['train'].classes)
     # Create the model
     model = LitAutoEncoder(args.model_name,num_classes)
@@ -93,6 +108,7 @@ def run(args):
 
     # Train the model
     trainer.fit(model, train_loader, val_loader)
+    trainer.test(dataloaders = test_loader)
     wandb.finish()
     
 if __name__ == "__main__":
@@ -101,7 +117,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'Image Classification Training Arguments')
     
     # Add arguments to the parser
-    parser.add_argument("-r", "--root", type = str, default = 'dataset/cat&dog', help = "Path to the data")
+    parser.add_argument("-r", "--root", type = str, default = '/home/ubuntu/workspace/kwanwoo/PETDIS/dataset/cat&dog', help = "Path to the data")
     parser.add_argument("-bs", "--batch_size", type = int, default = 128, help = "Mini-batch size")
     parser.add_argument("-is", "--inp_im_size", type = tuple, default = (224, 224), help = "Input image size")
     parser.add_argument("-mn", "--model_name", type = str, default = 'resnet34.a1_in1k', help = "Model name for backbone")
